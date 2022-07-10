@@ -5,7 +5,7 @@ const videoGrid = document.getElementById("video-grid");
 const myVideo = document.createElement("video");
 const showChat = document.querySelector("#showChat");
 const backBtn = document.querySelector(".header__back");
-myVideo.muted = true;
+
 
 backBtn.addEventListener("click", () => {
   document.querySelector(".main__left").style.display = "flex";
@@ -23,11 +23,8 @@ showChat.addEventListener("click", () => {
 
 const user = prompt("Enter your name");
 
-const peer = new Peer(undefined, {
-  path: "/peerjs",
-  host: "/",
-  port: "3030",
-});
+let peer = null;
+let peerID = null;
 let myVideoStream;
 async function getMedia(){
   return await navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
@@ -40,12 +37,31 @@ getMedia().then(getUserMedia =>{
       video: true,
     },function (stream){
       myVideoStream = stream;
+
+      peer = new Peer({
+        host:'/',port:3030,path:'/peerjs'
+      })
+      peer.on("open", (id) => {
+        if(id !== peerID){
+          peerID = id;
+          socket.emit("join-room", ROOM_ID, id, user);
+        }
+      });
+      // RECEIVE CALL OFFER FROM OTHERS, ANSWER AND ADD STREAM
+      peer.on("call", (call) => {
+              call.answer(stream);
+              const video = document.createElement("video");
+              call.on("stream", (userVideoStream) => {
+                addVideoStream(video, userVideoStream);
+              });
+      });
       addVideoStream(myVideo, stream);
-      socket.on("user-connected", (userId) => {
+      socket.on("user-connected", (userId,username) => {
+        console.log(userId,username)
         connectToNewUser(userId, stream);
       });
     })
-} );
+});
 //SEND CALL OFFER (SDP) TO NEW USER AND ADD STREAM
 const connectToNewUser = (userId, stream) => {
   const call = peer.call(userId, stream);
@@ -54,23 +70,7 @@ const connectToNewUser = (userId, stream) => {
     addVideoStream(video, userVideoStream);
   });
 };
-// RECEIVE CALL OFFER FROM OTHERS AND ANSWER AND ADD STREAM
-peer.on("call", (call) => {
-  getMedia().then(getUserMedia =>{
-    if(getUserMedia)
-      getUserMedia({video:true,audio: true},function (stream){
-    call.answer(stream);
-    const video = document.createElement("video");
-    call.on("stream", (userVideoStream) => {
-      addVideoStream(video, userVideoStream);
-    });
-  })})
-});
 
-//
-peer.on("open", (id) => {
-  socket.emit("join-room", ROOM_ID, id, user);
-});
 
 const addVideoStream = (video, stream) => {
   video.srcObject = stream;
